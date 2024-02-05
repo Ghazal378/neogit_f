@@ -131,13 +131,13 @@ int configuration() {
   file8 = fopen("Head","w");
   file9 = fopen("commit_hash","w");
   file10 = fopen("index","w");
-  fprintf(file4, "add\ncommit\nset\nreplace\nremove\nstatus\nconfig\ninit\nrese"
-                 "t\nstatus\nlog\nbranch\ncheckout\n");
   if (file1 == NULL || file2 == NULL || file3 == NULL || file4 == NULL ||
       file5 == NULL || file6 == NULL || file7 == NULL || file8 == NULL || file9 == NULL) {
     perror("Error opening files");
     return 1;
-  }
+  }fprintf(file4, "add\ncommit\nset\nreplace\nremove\nstatus\nconfig\ninit\nrese"
+                 "t\nstatus\nlog\nbranch\ncheckout\n");
+  fprintf(file8,".neogit/refs/heads/master");
   fclose(file2);
   fclose(file3);
   fclose(file1);
@@ -623,7 +623,21 @@ char *get_path(char *filename) {
     return NULL;
 }
 void get_current_branch(char *curr){
-  
+  goto_neogit();
+  DIR *dir=opendir(".neogit/refs/heads");
+  int count=0;
+  struct dirent *entry;
+  while((entry=readdir(dir))!=NULL){
+    if(entry->d_type==DT_REG){
+      count++;
+    }
+  }
+  if(count == 1){
+    strcpy(curr,"master");
+  }
+  else{
+    
+  }
 }
 void make_file_versions(const char *filename, char *file_path,char *commithash) {
     char path[PATH_MAX];
@@ -693,6 +707,17 @@ int run_commit(char *argv[], int argc) {
   get_user_info(user,email,1024);
   char commit_hash[41];
   generateHash(commit_hash,sizeof(commit_hash));
+  char branch[1024];
+  get_current_branch(branch);
+  char bran_path[PATH_MAX];
+  sprintf(bran_path,".neogit/refs/heads/%s",branch);
+  FILE *ref=fopen(bran_path,"w");
+  if(ref == NULL){
+    perror("Error opening branches files\n");
+    return 1;
+  }
+  fprintf(ref,"%s",commit_hash);
+  fclose(ref);
   FILE *file_hash=fopen(".neogit/commit_hash","w");
   if(file_hash==NULL){
     perror("Error opening commit file.\n");
@@ -1081,7 +1106,14 @@ void checkout_HEAD(){
 
 }
 void checkout_branch(char *argv){
-  
+  goto_neogit();
+  FILE *file=fopen(".neogit/Head","w");
+  if(file == NULL){
+    perror("Error switching branch.\n");
+    return;
+  }
+  fprintf(file,".neogit/refs/heads/%s",argv);
+  fclose(file);
 }
 int run_checkout(char *argv[],int argc){
   if(is_branch(argv[2]))
