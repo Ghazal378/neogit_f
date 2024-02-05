@@ -316,10 +316,11 @@ int run_config(char *argv[], int argc) {
   if (strcmp(argv[2], "--global") == 0 && strstr(argv[3], "alias") == NULL) {
     FILE *file, *tmp;
     char home_path[PATH_MAX];
-    strcat(home_path,getenv("HOME"));
-    strcat(home_path,".neogitconfig");
+    sprintf(home_path,"%s/.neogitconfig",getenv("HOME"));
     file = fopen(home_path, "r");
-    tmp = fopen("~/.tmpconfig", "a");
+    char temp_path[PATH_MAX];
+    sprintf(temp_path,"%s/.tmpconfig",getenv("HOME"));
+    tmp = fopen(temp_path, "a");
     if (file == NULL || tmp == NULL) {
       system("touch ~/.neogitconfig");
     }
@@ -347,7 +348,7 @@ int run_config(char *argv[], int argc) {
              strstr(argv[3], "alias") != NULL) {
       char path_e[PATH_MAX];
       strcat(path_e,getenv("HOME"));
-      strcat(path_e,".ALIAS_GLOBAL");
+      strcat(path_e,"/.ALIAS_GLOBAL");
       FILE *file = fopen(path_e, "a+");
       if (file == NULL) {
         perror("Error opening or creating ~/.ALIAS_GLOBAL");
@@ -467,7 +468,9 @@ int run_alias(char *argv[], int argc) {
   }
   fclose(file);
   if (found == 0) {
-    FILE *global = fopen("~/.ALIAS_GLOBAL", "a+");
+    char path_u[PATH_MAX];
+    sprintf(path_u,"%s/.ALIAS_GLOBAL",getenv("HOME"));
+    FILE *global = fopen(path_u, "a+");
     if (global == NULL) {
       perror("Error opening file.\n");
       return 1;
