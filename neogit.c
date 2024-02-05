@@ -216,7 +216,27 @@ int copy_file(const char *sourceFile, const char *destinationDir) {
     printf("Error copying the file.\n");
   }
 }
+int compare(char *filename,char *source_path){
+  goto_neogit();
+  char stage_path[PATH_MAX];
+  sprintf(stage_path,".neogit/stagingArea/%s",filename);
+  time_t time1= getFileModificationTime(source_path);
+  time_t time2= getFileModificationTime(stage_path);
+  if(time1 != time2){
+    return 1;
+  }
+  return 0;
+
+}
 int add_to_stage(char *path_file) {
+  char *lastSlash = strrchr(path_file, '/');
+  char filename[PATH_MAX];
+  if(lastSlash == NULL){
+    strcpy(filename,path_file);
+  }
+  else{
+    strcpy(filename,lastSlash+1);
+  }
   char source[PATH_MAX];
   strcpy(source, path_file);
   char *destination = ".neogit/stagingArea";
@@ -226,6 +246,11 @@ int add_to_stage(char *path_file) {
   if (goto_neogit() == 1) {
     perror("There is no repository initilized!");
     return 1;
+  }if(is_staged(filename)){
+    //compare if modified
+    if(compare(filename,source) == 0){
+      return 1;
+    }
   }
   FILE *tracking_file = fopen(".neogit/tracking", "a");
   char absolute_destination[PATH_MAX];
@@ -240,6 +265,7 @@ int add_to_stage(char *path_file) {
     perror("Error getting file/directory information");
     return 1;
   }
+  
   if (S_ISREG(file_info.st_mode)) {
     fprintf(tracking_file, "%s\n", cwd);
     fclose(tracking_file);
@@ -1158,9 +1184,6 @@ int main(int argc, char *argv[]) {
   else if(!strcmp(argv[1], "checkout")){
       run_checkout(argv,argc);
   }
-  // else if(!strcmp(argv[1], "diff")){
-  //     run_reset(argv,argc);
-  // }
   else {
     run_alias(argv, argc);
   }
