@@ -1,7 +1,10 @@
 Neogit
+
 Neogit is a minimalistic Git client built with C, providing essential version control functionality from the command line.
 
 Features
+
+
 Initialize a Repository: Easily start a new Git repository for your project.
 Add files and directories changes
 Commit Changes: Commit your changes with a simple command.
@@ -10,8 +13,10 @@ Checkout: Switch between branches or specific commit states.
 Log: View commit history with flexible filtering options.
 
 Getting Started
+
+
 Clone the Repository
-git clone https://github.com/your-username/neogit.git
+git clone https://github.com/your-username/neogit_f.git
 Build Neogit
 Copy code
 cd neogit
@@ -21,6 +26,8 @@ neogit init
 
 
 Usage
+
+
 Initialize a Repository
 neogit init
 Commit Changes
