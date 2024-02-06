@@ -650,7 +650,7 @@ char *get_path(char *filename) {
 }
 void get_current_branch(char *curr){
   goto_neogit();
-  DIR *dir=opendir(".neogit/refs/heads");
+  DIR *dir=opendir(".neogit/Head");
   int count=0;
   struct dirent *entry;
   while((entry=readdir(dir))!=NULL){
@@ -664,6 +664,78 @@ void get_current_branch(char *curr){
   else{
     
   }
+}
+int get_last_commit(const char *filename, char *result) {
+    goto_neogit();
+    char path[PATH_MAX] = ".neogit/files/";
+    strcat(path, filename);
+    DIR *dir;
+    dir = opendir(path);
+    if (dir == NULL) {
+        return 0;
+    }
+
+    int has_commits = 0;  // Flag to check if the file has commits
+    time_t temp = 0;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) {
+            has_commits = 1;  // The file has at least one commit
+            char file_path[2*PATH_MAX];
+            sprintf(file_path, "%s/%s", path, entry->d_name);
+            time_t time = getFileModificationTime(file_path);
+            if (time > temp) {
+                temp = time;
+                strcpy(result, file_path);
+            }
+        }
+    }
+
+    closedir(dir);
+
+    if (!has_commits) {
+        strcpy(result, "");  // The file has never been committed
+    }
+
+    return has_commits;
+}
+int compare_last(char *filename){
+  goto_neogit();
+  char hash[50];
+  get_last_commit(filename,hash);
+  char source_path[PATH_MAX];
+  sprintf(source_path,".neogit/files/%s/%s",filename,hash);
+  char stage_path[PATH_MAX];
+  FILE *source, *stage;
+  source=fopen(source_path,"r");
+  stage=fopen(stage_path,"r");
+  if(source == NULL || stage == NULL){
+    perror("Error opening files or directories.\n");
+    exit(1);
+  }
+  char line1[1024],line2[1024];
+  while(fgets(line1,1024,source)!=NULL && fgets(line2,1024,stage)!=NULL){
+    if(strcmp(line1,line2))
+      return 0;
+  }
+  if(fgets(line1,1024,source)!=NULL || fgets(line2,1024,stage)!=NULL){
+    return 0;
+  }
+  return 1;
+}
+int check_with_last_commit(){
+  goto_neogit();
+  DIR *dir=opendir(".neogit/stagingArea");
+  struct dirent *entry;
+  while((entry=readdir(dir))!=NULL){
+    if(entry->d_type==DT_REG){
+      if(compare_last(entry->d_name) == 1){
+        return 1;
+      }
+    }
+  }
+  return 0;
 }
 void make_file_versions(const char *filename, char *file_path,char *commithash) {
     char path[PATH_MAX];
@@ -686,6 +758,19 @@ void make_file_versions(const char *filename, char *file_path,char *commithash) 
         exit(1);
     }
 
+}
+int is_empty_stagingArea(){
+  goto_neogit();
+  DIR *dir=opendir(".neogit/stagingArea");
+  struct dirent *entry;
+  int count;
+  while ((entry=readdir(dir))!=NULL)
+  {
+    if(entry->d_type == DT_REG){
+      count++;
+    }
+  }
+  return count;
 }
 int run_commit(char *argv[], int argc) {
   char cwd[PATH_MAX];
@@ -731,6 +816,10 @@ int run_commit(char *argv[], int argc) {
   char user[1024];
   char email[1024];
   get_user_info(user,email,1024);
+  if(is_empty_stagingArea()==0 || check_with_last_commit()==1){
+    printf("working tree is clean\no changes added to commit\n");
+    return 1;
+  }
   char commit_hash[41];
   generateHash(commit_hash,sizeof(commit_hash));
   char branch[1024];
@@ -974,41 +1063,6 @@ void compare_files(const char *source_file, const char *commit_file) {
     }
     
 }
-int get_last_commit(const char *filename, char *result) {
-    goto_neogit();
-    char path[PATH_MAX] = ".neogit/files/";
-    strcat(path, filename);
-    DIR *dir;
-    dir = opendir(path);
-    if (dir == NULL) {
-        return 0;
-    }
-
-    int has_commits = 0;  // Flag to check if the file has commits
-    time_t temp = 0;
-
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            has_commits = 1;  // The file has at least one commit
-            char file_path[2*PATH_MAX];
-            sprintf(file_path, "%s/%s", path, entry->d_name);
-            time_t time = getFileModificationTime(file_path);
-            if (time > temp) {
-                temp = time;
-                strcpy(result, file_path);
-            }
-        }
-    }
-
-    closedir(dir);
-
-    if (!has_commits) {
-        strcpy(result, "");  // The file has never been committed
-    }
-
-    return has_commits;
-}
 void run_status(char *argv[], int argc) {
     char cwd[PATH_MAX];
 
@@ -1150,6 +1204,62 @@ int run_checkout(char *argv[],int argc){
     checkout_commithash(argv[2]);
   
 }
+void print_commit_log(const char *commit_file) {
+    goto_neogit();
+    char path[PATH_MAX];
+    sprintf(path,".neogit/commits/%s",commit_file);
+    FILE *file=fopen(path,"r");
+    if(file == NULL){
+      perror("Error opening files in commits directory.\n");
+      exit(1);
+    }
+    char line[1024];
+    while(fgets(line,1024,file)!=NULL){
+      if(strcmp(line,"file's paths:")==1){
+        printf("%s",line);
+      }
+      else{break;}
+    }
+}
+int run_log(char *argv[],int argc){
+  goto_neogit();
+  DIR *dir=opendir(".neogit/commits");
+  struct dirent *entry;
+  if(dir == NULL){
+    perror("Error opening commits directory.\n");
+    return 1;
+  }
+  char filename[1000][50];
+  int i=0;
+  while((entry=readdir(dir))!=NULL){
+    if(entry->d_type == DT_REG)
+      strcpy(filename[i++],entry->d_name);
+    }
+    perror("Too few arguments!\n");
+    closedir(dir);
+
+    if (argc == 2) {
+        for (int j = 0; j < i; j++) {
+            print_commit_log(filename[j]);
+        }
+    } else if (strcmp(argv[2], "-n") == 0) {
+        // Implement logic for -n option
+    } else if (strcmp(argv[2], "-branch") == 0) {
+        // Implement logic for -branch option
+    } else if (strcmp(argv[2], "-author") == 0) {
+        // Implement logic for -author option
+    } else if (strcmp(argv[2], "-since") == 0) {
+        // Implement logic for -since option
+    } else if (strcmp(argv[2], "-before") == 0) {
+        // Implement logic for -before option
+    } else if (strcmp(argv[2], "-search") == 0) {
+        // Implement logic for -search option
+    } else {
+        printf("Invalid option for log command.\n");
+    }
+
+    return 0;
+}
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     perror("Too few arguments!\n");
@@ -1174,17 +1284,13 @@ int main(int argc, char *argv[]) {
       reset(argv,argc);
   }else if(!strcmp(argv[1], "status")){
       run_status(argv,argc);
-  }
-  // else if(!strcmp(argv[1], "log")){
-  //     run_log(argv,argc);
-  // }
-  else if(!strcmp(argv[1], "branch")){
+  }else if(!strcmp(argv[1], "log")){
+      run_log(argv,argc);
+  }else if(!strcmp(argv[1], "branch")){
       run_branch(argv,argc);
-  }
-  else if(!strcmp(argv[1], "checkout")){
+  }else if(!strcmp(argv[1], "checkout")){
       run_checkout(argv,argc);
-  }
-  else {
+  }else {
     run_alias(argv, argc);
   }
   return 0;
