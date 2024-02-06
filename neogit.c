@@ -739,8 +739,7 @@ int check_with_last_commit() {
   }
   return 0;
 }
-void make_file_versions(const char *filename, char *file_path,
-                        char *commithash) {
+void make_file_versions(const char *filename, char *file_path,char *commithash) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), ".neogit/files/%s", filename);
   mkdir(path, 0755);
@@ -801,9 +800,9 @@ int run_commit(char *argv[], int argc) {
       }
     }
     if (!found) {
-      perror("There is no shourcut name for given info.\n");
-      return 1;
-    }
+    perror("There is no shourcut name for given info.\n");
+    return 1;
+  }
   } else {
     strcpy(message, argv[3]);
   }
@@ -817,33 +816,18 @@ int run_commit(char *argv[], int argc) {
   }
   char user[1024];
   char email[1024];
-  get_user_info(user, email, 1024);
-  // if(is_empty_stagingArea()==0 || check_with_last_commit()==1){
-  //   printf("working tree is clean\no changes added to commit\n");
-  //   return 1;
-  // }
+  get_user_info(user,email,1024);
   char commit_hash[41];
-  generateHash(commit_hash, sizeof(commit_hash));
-  char branch[1024];
-  get_current_branch(branch);
-  char bran_path[PATH_MAX];
-  sprintf(bran_path, ".neogit/refs/heads/%s", branch);
-  FILE *ref = fopen(bran_path, "w");
-  if (ref == NULL) {
-    perror("Error opening branches files\n");
-    return 1;
-  }
-  fprintf(ref, "%s", commit_hash);
-  fclose(ref);
-  FILE *file_hash = fopen(".neogit/commit_hash", "w");
-  if (file_hash == NULL) {
+  generateHash(commit_hash,sizeof(commit_hash));
+  FILE *file_hash=fopen(".neogit/commit_hash","w");
+  if(file_hash==NULL){
     perror("Error opening commit file.\n");
     return 1;
   }
-  fprintf(file_hash, "%s", commit_hash);
+  fprintf(file_hash,"%s",commit_hash);
   fclose(file_hash);
   char commit_file[256];
-  snprintf(commit_file, sizeof(commit_file), ".neogit/commits/%s", commit_hash);
+  snprintf(commit_file, sizeof(commit_file), ".neogit/commits/%s",commit_hash);
   FILE *commit_files = fopen(commit_file, "w");
   if (commit_files == NULL) {
     perror("Error making the commit file.\n");
@@ -853,28 +837,29 @@ int run_commit(char *argv[], int argc) {
   fprintf(commit_files, "commit_hash = %s\n", commit_hash);
   fprintf(commit_files, "commit_time = %s\n", time_str);
   fprintf(commit_files, "commit_message = %s\n", message);
-  fprintf(commit_files, "author= %s <%s>\n", user, email);
-  fprintf(commit_files, "file's paths:\n");
+  fprintf(commit_files,"author= %s <%s>\n",user,email);
+  fprintf(commit_files,"file's paths:\n");
   DIR *stagingarea;
   stagingarea = opendir(".neogit/stagingArea");
   struct dirent *entry;
   while ((entry = readdir(stagingarea)) != NULL) {
     if (entry->d_type == DT_REG) {
-      char path[PATH_MAX];
-      char *tracking_path = get_path(entry->d_name);
-      make_file_versions(entry->d_name, tracking_path, commit_hash);
-      if (tracking_path != NULL) {
-        fprintf(commit_files, "%s \n", tracking_path);
-        free(tracking_path);
-        // Delete the path from the tracking area
-        char path_to_delete[PATH_MAX] = "sed -i '/";
+        char path[PATH_MAX];
+        char *tracking_path = get_path(entry->d_name);
+        make_file_versions(entry->d_name,tracking_path,commit_hash);
+        if (tracking_path != NULL) {
+            fprintf(commit_files, "%s \n", tracking_path);
+            free(tracking_path);
+            // Delete the path from the tracking area
+            char path_to_delete[PATH_MAX] = "sed -i '/";
+            strcat(path_to_delete, entry->d_name);
+            strcat(path_to_delete, "/d' .neogit/tracking");
+            system(path_to_delete);
+        }
+        char path_to_delete[PATH_MAX] = "rm .neogit/stagingArea/";
         strcat(path_to_delete, entry->d_name);
-        strcat(path_to_delete, "/d' .neogit/tracking");
         system(path_to_delete);
-      }
-      char path_to_delete[PATH_MAX] = "rm .neogit/stagingArea/";
-      strcat(path_to_delete, entry->d_name);
-      system(path_to_delete);
+
     }
   }
 }
@@ -1181,7 +1166,59 @@ int is_branch(char *branchnanme) {
   }
   return 1;
 }
-void checkout_commithash(char *argv) {}
+int copy_file_tofile(const char *source_file, const char *destination_file) {
+    char command[PATH_MAX * 2 + 5];
+    snprintf(command, sizeof(command), "cp %s %s", source_file, destination_file);
+
+    // Execute the command using the system function
+    int status = system(command);
+
+    // Check if the command execution was successful
+    if (status != 0) {
+        fprintf(stderr, "Error copying the file: %s\n", source_file);
+        return 1;
+    }
+
+    return 0;
+}
+void checkout_commithash(char *hash) {
+  goto_neogit();
+  char path[PATH_MAX];
+  sprintf(path,".neogit/commits/%s",hash);
+  FILE *file=fopen(path,"r");
+  if(file == NULL){
+    perror("no commit found with given input!\nPlease enter a valid commit hash.\n");
+    return;
+  }
+  char line[1024];
+  while(fgets(line,1024,file)!=NULL){
+    if(strstr(line,"file's paths:") == NULL){
+      continue;
+    }
+    else{
+      break;
+    }
+  }
+  while(fgets(line,1024,file)!=NULL){
+    line[strcspn(line,"\n")]='0';
+    const char *lastSlash = strrchr(line, '/');
+    char filename[PATH_MAX];
+    if(lastSlash == NULL){
+      strcpy(filename,lastSlash);
+    }else{
+      strcpy(filename,lastSlash+1);
+    }
+    char path_ver[PATH_MAX];
+    sprintf(path_ver,".neogit/files/%s/%s",filename,hash);
+    copy_file_tofile(line,path_ver);
+    char syscom1[PATH_MAX*2+5];
+    sprintf(syscom1,"mv .neogit/files/%s/%s .neogit/files/%s/%s",filename,hash,filename,filename);
+    system(syscom1);
+    char syscom2[PATH_MAX*2+5];
+    sprintf(syscom2,"cp .neogit/files/%s/%s %s",filename,filename,line);
+    system(syscom2);
+  }
+}
 void checkout_HEAD() {}
 void checkout_branch(char *argv) {
   goto_neogit();
