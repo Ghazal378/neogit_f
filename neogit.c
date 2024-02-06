@@ -773,6 +773,10 @@ int is_empty_stagingArea() {
   return count;
 }
 int run_commit(char *argv[], int argc) {
+  if (argc < 4) {
+    perror("too few arguments\n");
+    return 1;
+  }
   char cwd[PATH_MAX];
 
   if (goto_neogit() != 0) {
@@ -780,7 +784,6 @@ int run_commit(char *argv[], int argc) {
     return 1;
   }
   char message[1024];
-
   if (!strcmp(argv[2], "-s")) {
     FILE *messages = fopen(".neogit/messages", "r");
     if (messages == NULL) {
@@ -805,14 +808,15 @@ int run_commit(char *argv[], int argc) {
   } else {
     strcpy(message, argv[3]);
   }
-  if (argc < 4 || message == NULL) {
-    perror("too few arguments\n");
-    return 1;
-  }
   if (strlen(message) > 72) {
     perror("message too long\n");
     return 1;
   }
+  char branch[1024];
+  FILE *head_file=fopen(".neogit/Head","r");
+  char line[PATH_MAX];
+  fgets(line,1024,head_file);
+  sscanf(line,".neogit/refs/heads/%s",branch);
   char user[1024];
   char email[1024];
   get_user_info(user,email,1024);
@@ -825,6 +829,8 @@ int run_commit(char *argv[], int argc) {
   }
   fprintf(file_hash,"%s",commit_hash);
   fclose(file_hash);
+  FILE *HEAD_f=fopen(line,"w");
+  fprintf(HEAD_f,"%s",commit_hash);
   char commit_file[256];
   snprintf(commit_file, sizeof(commit_file), ".neogit/commits/%s",commit_hash);
   FILE *commit_files = fopen(commit_file, "w");
@@ -833,7 +839,7 @@ int run_commit(char *argv[], int argc) {
   }
   char time_str[24];
   get_current_time(time_str);
-  fprintf(commit_files, "commit_hash = %s\n", commit_hash);
+  fprintf(commit_files, "commit_hash = %s on branch %s\n", commit_hash,branch);
   fprintf(commit_files, "commit_time = %s\n", time_str);
   fprintf(commit_files, "commit_message = %s\n", message);
   fprintf(commit_files,"author= %s <%s>\n",user,email);
@@ -861,6 +867,7 @@ int run_commit(char *argv[], int argc) {
 
     }
   }
+  printf("change commited with %s commit hash\n%s\n**%s**\n",commit_hash,time_str,message);
 }
 int shortcut_messages(char *argv[], int argc) {
   if (goto_neogit() == 1) {
