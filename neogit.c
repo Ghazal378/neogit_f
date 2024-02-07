@@ -839,10 +839,11 @@ int run_commit(char *argv[], int argc) {
   }
   char time_str[24];
   get_current_time(time_str);
-  fprintf(commit_files, "commit_hash = %s on branch %s\n", commit_hash,branch);
+  fprintf(commit_files, "commit_hash = %s\n", commit_hash);
+  fprintf(commit_files, "branch = %s\n", branch);
   fprintf(commit_files, "commit_time = %s\n", time_str);
   fprintf(commit_files, "commit_message = %s\n", message);
-  fprintf(commit_files,"author= %s <%s>\n",user,email);
+  fprintf(commit_files,"author = %s <%s>\n",user,email);
   fprintf(commit_files,"file's paths:\n");
   DIR *stagingarea;
   stagingarea = opendir(".neogit/stagingArea");
@@ -1115,8 +1116,7 @@ int create_branch(const char *branch_name) {
   }
   char last_commit_hash[50];
   if (fgets(last_commit_hash, 50, file) == NULL) {
-    perror("You cant make a new branch without commiting!\nstill on branch "
-           "\"master\"");
+    perror("You cant make a new branch without commiting!\nstill on the previos branch ");
     return 1;
   }
   // Check if the branch already exists
@@ -1172,60 +1172,54 @@ int is_branch(char *branchnanme) {
   }
   return 1;
 }
-int copy_file_tofile(const char *source_file, const char *destination_file) {
-    char command[PATH_MAX * 2 + 5];
-    snprintf(command, sizeof(command), "cp %s %s", source_file, destination_file);
 
-    // Execute the command using the system function
-    int status = system(command);
-
-    // Check if the command execution was successful
-    if (status != 0) {
-        fprintf(stderr, "Error copying the file: %s\n", source_file);
-        return 1;
-    }
-
-    return 0;
-}
 void checkout_commithash(char *hash) {
-  goto_neogit();
-  char path[PATH_MAX];
-  sprintf(path,".neogit/commits/%s",hash);
-  FILE *file=fopen(path,"r");
-  if(file == NULL){
-    perror("no commit found with given input!\nPlease enter a valid commit hash.\n");
-    return;
-  }
-  char line[1024];
-  while(fgets(line,1024,file)!=NULL){
-    if(strstr(line,"file's paths:") == NULL){
-      continue;
+    goto_neogit();
+    char path[PATH_MAX];
+    sprintf(path, ".neogit/commits/%s", hash);
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        perror("No commit found with the given input!\nPlease enter a valid commit hash.\n");
+        return;
     }
-    else{
-      break;
+
+    char line[1024];
+    while (fgets(line, 1024, file) != NULL) {
+        if (strstr(line, "paths") == NULL) {
+            continue;
+        } else {
+            break;
+        }
     }
-  }
-  while(fgets(line,1024,file)!=NULL){
-    line[strcspn(line,"\n")]='0';
-    const char *lastSlash = strrchr(line, '/');
-    char filename[PATH_MAX];
-    if(lastSlash == NULL){
-      strcpy(filename,lastSlash);
-    }else{
-      strcpy(filename,lastSlash+1);
+
+    while (fgets(line, 1024, file) != NULL) {
+        line[strcspn(line, "\n")-1] = '\0';
+        const char *lastSlash = strrchr(line, '/');
+        char filename[PATH_MAX];
+        strcpy(filename, lastSlash + 1);
+        char path_ver[2 * PATH_MAX + 5];
+        sprintf(path_ver, ".neogit/files/%s/%s", filename, hash);
+        printf("Copying from: %s\nCopying to: %s\n", path_ver, line);
+        FILE *source = fopen(path_ver, "r");
+        FILE *destination = fopen(line, "w");
+
+        if (source == NULL || destination == NULL) {
+            perror("Error opening source or destination file");
+            return;
+        }
+
+        char str[1024];
+        while (fgets(str, 1024, source) != NULL) {
+            fprintf(destination, "%s", str);
+        }
+
+        fclose(source);
+        fclose(destination);
     }
-    char path_ver[PATH_MAX];
-    sprintf(path_ver,".neogit/files/%s/%s",filename,hash);
-    copy_file_tofile(line,path_ver);
-    char syscom1[PATH_MAX*2+5];
-    sprintf(syscom1,"mv .neogit/files/%s/%s .neogit/files/%s/%s",filename,hash,filename,filename);
-    system(syscom1);
-    char syscom2[PATH_MAX*2+5];
-    sprintf(syscom2,"cp .neogit/files/%s/%s %s",filename,filename,line);
-    system(syscom2);
-  }
+
+    fclose(file);  // Move fclose after the second while loop
 }
-void checkout_HEAD() {}
+
 void checkout_branch(char *argv) {
   goto_neogit();
   FILE *file = fopen(".neogit/Head", "w");
@@ -1233,14 +1227,19 @@ void checkout_branch(char *argv) {
     perror("Error switching branch.\n");
     return;
   }
-  fprintf(file, ".neogit/refs/heads/%s", argv);
+  char path[PATH_MAX];
+  sprintf(path,".neogit/refs/heads/%s", argv);
+  fprintf(file, "%s", path);
   fclose(file);
+  FILE *head=fopen(path,"r");
+  char hash[1024];
+  fgets(hash,1024,head);
+  checkout_commithash(hash);
+
 }
 int run_checkout(char *argv[], int argc) {
   if (is_branch(argv[2]))
     checkout_branch(argv[2]);
-  else if (strcmp(argv[2], "HEAD") == 0)
-    checkout_HEAD();
   else
     checkout_commithash(argv[2]);
 }
@@ -1290,9 +1289,27 @@ int run_log(char *argv[], int argc) {
         print_commit_log(filename[j]);
     }
 }
- else if (strcmp(argv[2], "-branch") == 0) {
-    // Implement logic for -branch option
-  } else if (strcmp(argv[2], "-author") == 0) {
+  else if (strcmp(argv[2], "-branch") == 0) {
+      for(int j = 0; j < i; j++) {
+          char path_s[PATH_MAX];
+          sprintf(path_s, ".neogit/commits/%s", filename[j]);
+          FILE *file_s = fopen(path_s, "r");
+          char line[1024];
+          while (fgets(line, 1024, file_s) != NULL) {
+            char key[1024], value[1024];
+            if (sscanf(line, "%s = %[^\n]", key, value) != 2)
+              continue;
+            if(strcmp(key,"branch")==0){
+              if(strcmp(value,argv[3])==0){
+                print_commit_log(filename[j]);
+                break;
+              }
+            }
+          }
+          fclose(file_s);
+      }
+  }
+ else if (strcmp(argv[2], "-author") == 0) {
     for (int j = 0; j < i; j++) {
       char path_s[PATH_MAX];
       sprintf(path_s, ".neogit/commits/%s", filename[j]);
@@ -1302,7 +1319,7 @@ int run_log(char *argv[], int argc) {
       char line[1024];
       while (fgets(line, 1024, file_s) != NULL) {
         char key[1024], value[1024];
-        if (sscanf(line, "%[^=]= %s", key, value) != 2)
+        if (sscanf(line, "%s = %s", key, value) != 2)
           continue;
         if (strcmp(key, "author") == 0) {
           if (strcmp(value, name) == 0) {
